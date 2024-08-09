@@ -297,6 +297,10 @@ class ClientWebSocketResponse:
                 self._waiting = True
                 try:
                     if receive_timeout:
+                        # Entering the context manager and creating
+                        # Timeout() object can take almost 50% of the
+                        # run time in this loop so we avoid it if
+                        # there is no read timeout.
                         async with async_timeout.timeout(receive_timeout):
                             msg = await self._reader.read()
                     else:
