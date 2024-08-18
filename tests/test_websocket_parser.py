@@ -199,19 +199,19 @@ def test_close_frame_invalid(out, parser) -> None:
 def test_close_frame_invalid_2(out, parser) -> None:
     data = build_close_frame(code=1)
 
-    with pytest.raises(WebSocketError) as ctx:
-        parser._feed_data(data)
+    parser.feed_data(data)
+    exc = parser._exc
 
-    assert ctx.value.code == WSCloseCode.PROTOCOL_ERROR
+    assert exc.code == WSCloseCode.PROTOCOL_ERROR
 
 
 def test_close_frame_unicode_err(parser) -> None:
     data = build_close_frame(code=1000, message=b"\xf4\x90\x80\x80")
 
-    with pytest.raises(WebSocketError) as ctx:
-        parser._feed_data(data)
+    parser.feed_data(data)
+    exc = parser._exc
 
-    assert ctx.value.code == WSCloseCode.INVALID_TEXT
+    assert exc.code == WSCloseCode.INVALID_TEXT
 
 
 def test_unknown_frame(out, parser) -> None:
@@ -225,7 +225,7 @@ def test_unknown_frame(out, parser) -> None:
 
 def test_simple_text(out, parser) -> None:
     data = build_frame(b"text", WSMsgType.TEXT)
-    parser._feed_data(data)
+    parser.feed_data(data)
     res = out._buffer[0]
     assert res == ((WSMsgType.TEXT, "text", ""), 4)
 
@@ -233,10 +233,10 @@ def test_simple_text(out, parser) -> None:
 def test_simple_text_unicode_err(parser) -> None:
     data = build_frame(b"\xf4\x90\x80\x80", WSMsgType.TEXT)
 
-    with pytest.raises(WebSocketError) as ctx:
-        parser._feed_data(data)
+    parser.feed_data(data)
+    exc = parser._exc
 
-    assert ctx.value.code == WSCloseCode.INVALID_TEXT
+    assert exc.code == WSCloseCode.INVALID_TEXT
 
 
 def test_simple_binary(out, parser) -> None:
@@ -250,8 +250,8 @@ def test_simple_binary(out, parser) -> None:
 
 def test_fragmentation_header(out, parser) -> None:
     data = build_frame(b"a", WSMsgType.TEXT)
-    parser._feed_data(data[:1])
-    parser._feed_data(data[1:])
+    parser.feed_data(data[:1])
+    parser.feed_data(data[1:])
 
     res = out._buffer[0]
     assert res == (WSMessage(WSMsgType.TEXT, "a", ""), 1)
@@ -259,10 +259,10 @@ def test_fragmentation_header(out, parser) -> None:
 
 def test_continuation(out, parser) -> None:
     data1 = build_frame(b"line1", WSMsgType.TEXT, is_fin=False)
-    parser._feed_data(data1)
+    parser.feed_data(data1)
 
     data2 = build_frame(b"line2", WSMsgType.CONTINUATION)
-    parser._feed_data(data2)
+    parser.feed_data(data2)
 
     res = out._buffer[0]
     assert res == (WSMessage(WSMsgType.TEXT, "line1line2", ""), 10)
@@ -277,13 +277,13 @@ def test_continuation_with_ping(out, parser) -> None:
     ]
 
     data1 = build_frame(b"line1", WSMsgType.TEXT, is_fin=False)
-    parser._feed_data(data1)
+    parser.feed_data(data1)
 
     data2 = build_frame(b"", WSMsgType.PING)
-    parser._feed_data(data2)
+    parser.feed_data(data2)
 
     data3 = build_frame(b"line2", WSMsgType.CONTINUATION)
-    parser._feed_data(data3)
+    parser.feed_data(data3)
 
     res = out._buffer[0]
     assert res == (WSMessage(WSMsgType.PING, b"", ""), 0)
@@ -298,8 +298,9 @@ def test_continuation_err(out, parser) -> None:
         (1, WSMsgType.TEXT, b"line2", False),
     ]
 
-    with pytest.raises(WebSocketError):
-        parser._feed_data(b"")
+    parser.feed_data(b"")
+    exc = parser._exc
+    assert isinstance(exc, WebSocketError)
 
 
 def test_continuation_with_close(out, parser) -> None:
@@ -330,10 +331,10 @@ def test_continuation_with_close_unicode_err(out, parser) -> None:
         (1, WSMsgType.CONTINUATION, b"line2", False),
     ]
 
-    with pytest.raises(WebSocketError) as ctx:
-        parser._feed_data(b"")
+    parser.feed_data(b"")
+    exc = parser._exc
 
-    assert ctx.value.code == WSCloseCode.INVALID_TEXT
+    assert exc.code == WSCloseCode.INVALID_TEXT
 
 
 def test_continuation_with_close_bad_code(out, parser) -> None:
@@ -344,10 +345,10 @@ def test_continuation_with_close_bad_code(out, parser) -> None:
         (1, WSMsgType.CONTINUATION, b"line2", False),
     ]
 
-    with pytest.raises(WebSocketError) as ctx:
-        parser._feed_data(b"")
+    parser.feed_data(b"")
+    exc = parser._exc
 
-    assert ctx.value.code == WSCloseCode.PROTOCOL_ERROR
+    assert exc.code == WSCloseCode.PROTOCOL_ERROR
 
 
 def test_continuation_with_close_bad_payload(out, parser) -> None:
@@ -358,10 +359,10 @@ def test_continuation_with_close_bad_payload(out, parser) -> None:
         (1, WSMsgType.CONTINUATION, b"line2", False),
     ]
 
-    with pytest.raises(WebSocketError) as ctx:
-        parser._feed_data(b"")
+    parser.feed_data(b"")
+    exc = parser._exc
 
-    assert ctx.value.code, WSCloseCode.PROTOCOL_ERROR
+    assert exc.code, WSCloseCode.PROTOCOL_ERROR
 
 
 def test_continuation_with_close_empty(out, parser) -> None:
@@ -477,25 +478,25 @@ def test_parse_no_compress_frame_single() -> None:
 def test_msg_too_large(out) -> None:
     parser = WebSocketReader(out, 256, compress=False)
     data = build_frame(b"text" * 256, WSMsgType.TEXT)
-    with pytest.raises(WebSocketError) as ctx:
-        parser._feed_data(data)
-    assert ctx.value.code == WSCloseCode.MESSAGE_TOO_BIG
+    parser.feed_data(data)
+    exc = parser._exc
+    assert exc.code == WSCloseCode.MESSAGE_TOO_BIG
 
 
 def test_msg_too_large_not_fin(out) -> None:
     parser = WebSocketReader(out, 256, compress=False)
     data = build_frame(b"text" * 256, WSMsgType.TEXT, is_fin=False)
-    with pytest.raises(WebSocketError) as ctx:
-        parser._feed_data(data)
-    assert ctx.value.code == WSCloseCode.MESSAGE_TOO_BIG
+    parser.feed_data(data)
+    exc = parser._exc
+    assert exc.code == WSCloseCode.MESSAGE_TOO_BIG
 
 
 def test_compressed_msg_too_large(out) -> None:
     parser = WebSocketReader(out, 256, compress=True)
     data = build_frame(b"aaa" * 256, WSMsgType.TEXT, compress=True)
-    with pytest.raises(WebSocketError) as ctx:
-        parser._feed_data(data)
-    assert ctx.value.code == WSCloseCode.MESSAGE_TOO_BIG
+    parser.feed_data(data)
+    exc = parser._exc
+    assert exc.code == WSCloseCode.MESSAGE_TOO_BIG
 
 
 class TestWebSocketError:
