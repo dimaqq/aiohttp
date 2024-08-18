@@ -367,13 +367,13 @@ class WebSocketReader:
         self, fin: bool, opcode: int, payload: bytearray, compressed: Optional[bool]
     ) -> None:
         """Handle PING frame."""
-        self.queue.feed_data(WSMessage(WSMsgType.PING, payload, ""))
+        self.queue.feed_data(WSMessage(WSMsgType.PING, payload, ""), len(payload))
 
     def _handle_frame_op_pong(
         self, fin: bool, opcode: int, payload: bytearray, compressed: Optional[bool]
     ) -> None:
         """Handle PONG frame."""
-        self.queue.feed_data(WSMessage(WSMsgType.PONG, payload, ""))
+        self.queue.feed_data(WSMessage(WSMsgType.PONG, payload, ""), len(payload))
 
     def _handle_frame_with_payload(
         self, fin: bool, opcode: int, payload: bytearray, compressed: Optional[bool]
@@ -454,10 +454,12 @@ class WebSocketReader:
                     WSCloseCode.INVALID_TEXT, "Invalid UTF-8 text message"
                 ) from exc
 
-            self.queue.feed_data(WSMessage(WSMsgType.TEXT, text, ""))
+            self.queue.feed_data(WSMessage(WSMsgType.TEXT, text, ""), len(text))
             return
 
-        self.queue.feed_data(WSMessage(WSMsgType.BINARY, payload_merged, ""))
+        self.queue.feed_data(
+            WSMessage(WSMsgType.BINARY, payload_merged, ""), len(payload_merged)
+        )
 
     _handlers = {
         WSMsgType.CLOSE.value: _handle_frame_op_close,
