@@ -15,6 +15,7 @@ from typing import (
     Any,
     Callable,
     Final,
+    Generator,
     List,
     NamedTuple,
     Optional,
@@ -469,9 +470,8 @@ class WebSocketReader:
         WSMsgType.CONTINUATION.value: _handle_frame_with_payload,
     }
 
-    def parse_frame(self, buf: bytes) -> List[_FrameType]:
+    def parse_frame(self, buf: bytes) -> Generator[_FrameType, None, None]:
         """Return the next frame from the socket."""
-        frames: List[_FrameType] = []
         if self._tail:
             buf, self._tail = self._tail + buf, b""
 
@@ -602,15 +602,11 @@ class WebSocketReader:
 
                 if TYPE_CHECKING:
                     assert self._frame_opcode is not None
-                frames.append(
-                    (self._frame_fin, self._frame_opcode, payload, self._compressed)
-                )
+                yield (self._frame_fin, self._frame_opcode, payload, self._compressed)
                 self._frame_payload = bytearray()
                 self._state = WSParserState.READ_HEADER
 
         self._tail = buf[start_pos:]
-
-        return frames
 
 
 class WebSocketWriter:
